@@ -40,8 +40,8 @@ logging:
   format: "%(asctime)s - %(levelname)s - %(message)s"
 # resnet18 推理服务配置
 service:
-  enabled: false
-  resnet18_url: "http://127.0.0.1:8000/predict"
+  enabled: true
+  resnet18_url: "http://121.40.71.169:8000/predict"
   blank_label: 0
 
 # 访问流程相关配置
