@@ -4,6 +4,8 @@ browser:
   accept_language: "zh-CN,zh;q=0.9,en;q=0.8"
   page_load_strategy: "normal"
   timeout: 15 # seconds
+  # 浏览器配置文件目录，若为空，则不理会
+  profile: r"C:\Users\xujy\AppData\Roaming\Mozilla\Firefox\Profiles\ka2vpodo.default-release"
 
 proxy:
   enabled: true
@@ -19,7 +21,7 @@ pcapng:
   delete_on_failure: true # 访问失败时清理对应日志与抓包文件
   port:
     tls: 10808 #tls流量过滤端口
-    proxy: 15973 # 代理流量过滤端口
+    proxy: 1424 # 代理流量过滤端口
 
 websites:
   file: "websites.txt" # 网站列表文件，每行一个网址
@@ -40,7 +42,6 @@ logging:
 service:
   enabled: false
   resnet18_url: "http://127.0.0.1:8000/predict"
-  timeout: 5
   blank_label: 0
 
 # 访问流程相关配置
