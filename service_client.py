@@ -19,23 +19,18 @@ def classify_screenshot(service_config: dict, screenshot_path: str) -> Optional[
         logger.warning("requests 库未安装，无法调用识别服务")
         return None
 
-    timeout = service_config.get("timeout", 5)
-    payload = {"image_path": screenshot_path}
+    with open(screenshot_path, "rb") as f:
+        files = {"file": f}
+    
 
     try:
-        response = requests.post(service_url, json=payload, timeout=timeout)
-        response.raise_for_status()
+        response = requests.post(service_url, files = files)
+        data = response.json()
+        return data.get("result")
     except requests.RequestException as exc:  # type: ignore[attr-defined]
         logger.warning("调用识别服务失败: %s", exc)
         return None
 
-    try:
-        data = response.json()
-    except ValueError as exc:
-        logger.warning("识别服务返回非 JSON 数据: %s", exc)
-        return None
-
-    return _extract_prediction(data)
 
 
 def is_blank_prediction(prediction: Optional[int], service_config: dict) -> bool:

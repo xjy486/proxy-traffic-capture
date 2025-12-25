@@ -84,9 +84,9 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
         result["status"] = "blank_page"
         # 如果是空白页，是否需要清理抓包？根据需求，这里假设保留以便分析，或者也可以清理
         if pcap_enabled and cleanup_on_failure:
-            delete_capture_files(capture_domain, capture_index, config)
+            delete_capture_files(pcap_cfg, capture_domain, capture_index)
     else:
         result["status"] = "success"
         logger.info(f"处理成功: {url}, 分类结果: {prediction}")
-
+    result["status"] = "success"
     return result
