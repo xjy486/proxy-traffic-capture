@@ -1,0 +1,52 @@
+browser:
+  headless: false
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
+  accept_language: "zh-CN,zh;q=0.9,en;q=0.8"
+  page_load_strategy: "normal"
+  timeout: 15 # seconds
+
+proxy:
+  enabled: true
+  host: "192.168.148.139"
+  port: 10808
+
+pcapng:
+  # 通过远程调用的方式，调用代理服务器，在服务器端生成抓包流量
+  service: http://192.168.148.139:5000/
+  interface: "ens33" # 抓包网卡接口
+  timeout: 60 # 抓包任务超时时长（秒）
+  request_timeout: 10 # HTTP 请求超时时长（秒）
+  delete_on_failure: true # 访问失败时清理对应日志与抓包文件
+  port:
+    tls: 10808 #tls流量过滤端口
+    proxy: 15973 # 代理流量过滤端口
+
+websites:
+  file: "websites.txt" # 网站列表文件，每行一个网址
+  count: 5 #每个网站访问次数
+
+driver:
+  # 驱动路径
+  path: "" # optional, if empty use webdriver-manager
+
+file:
+  # 截图目录，./screenshots/{domain}/{idx}.png domain为网址域名，idx为从0开始的数字，为访问次数，
+  # 若目录不存在，自动创建
+  screenshots_dir: "screenshots"
+logging:
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+# resnet18 推理服务配置
+service:
+  enabled: false
+  resnet18_url: "http://127.0.0.1:8000/predict"
+  timeout: 5
+  blank_label: 0
+
+# 访问流程相关配置
+visit:
+  max_retries: 2
+  scroll_steps: 4
+  scroll_pixels: 400
+  scroll_pause: 0.8
+  post_wait: 1.0
