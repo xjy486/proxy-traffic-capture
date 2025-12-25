@@ -1,6 +1,6 @@
 import logging
-import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 
 from selenium.webdriver.remote.webdriver import WebDriver
 
@@ -11,9 +11,44 @@ from utils import prepare_capture_context
 
 logger = logging.getLogger(__name__)
 
+# 创建全局线程池，用于异步处理分类任务
+# max_workers 可以根据需要调整，避免过多并发请求压垮分类服务
+classification_executor = ThreadPoolExecutor(max_workers=4)
+
+def _async_classify_task(service_cfg: dict, pcap_cfg: dict, screenshot_path: str, url: str, capture_domain: str, capture_index: str) -> Dict[str, Any]:
+    """
+    异步执行的分类任务：分类 -> 判断空白页 -> (可选)清理抓包文件
+    
+    Returns:
+        Dict: 包含 prediction 和 is_blank 的结果字典
+    """
+    result = {"prediction": None, "is_blank": False, "error": None}
+    try:
+        prediction = classify_screenshot(service_cfg, screenshot_path)
+        result["prediction"] = prediction
+        
+        if is_blank_prediction(prediction, service_cfg):
+            logger.warning(f"检测到空白页 ({url}), 预测结果: {prediction}")
+            result["is_blank"] = True
+            
+            pcap_enabled = bool(pcap_cfg.get("service"))
+            cleanup_on_failure = bool(pcap_cfg.get("delete_on_failure", True))
+            
+            if pcap_enabled and cleanup_on_failure:
+                logger.info(f"空白页清理抓包文件: {url}")
+                delete_capture_files(pcap_cfg, capture_domain, capture_index)
+        else:
+            logger.info(f"后台分类完成: {url}, 结果: {prediction}")
+            
+    except Exception as e:
+        logger.error(f"后台分类任务发生错误 ({url}): {e}")
+        result["error"] = str(e)
+        
+    return result
+
 def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    处理单个 URL 的完整流程：抓包 -> 访问 -> 截图 -> 停止抓包 -> 分类。
+    处理单个 URL 的完整流程：抓包 -> 访问 -> 截图 -> 停止抓包 -> (异步)分类。
     
     Args:
         driver: WebDriver 实例
@@ -21,7 +56,7 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
         config: 全局配置
         
     Returns:
-        Dict: 处理结果，包含 status, screenshot_path, prediction 等信息
+        Dict: 处理结果，包含 status, screenshot_path, future 等信息。
     """
     service_cfg = config.get("service", {}) or {}
     pcap_cfg = config.get("pcapng", {}) or {}
@@ -45,8 +80,9 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
         "index": capture_index,
         "screenshot_path": screenshot_path,
         "status": "unknown",
-        "prediction": None,
-        "is_blank": False
+        "prediction": "pending", # 标记为处理中
+        "is_blank": False,
+        "future": None
     }
 
     # 2. 启动抓包
@@ -63,8 +99,7 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
     if pcap_enabled:
         if not stop_capture_task(pcap_cfg, capture_domain, capture_index):
             logger.error(f"停止抓包失败: {url}")
-            # 即使停止失败，如果访问成功了，也可能算部分成功，但这里为了严谨标记为错误
-            # 或者仅记录日志
+            # 即使停止失败，如果访问成功了，也可能算部分成功
             pass
 
     if not visit_success:
@@ -74,19 +109,21 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
             delete_capture_files(pcap_cfg, capture_domain, capture_index)
         return result
 
-    # 5. 截图分类
-    prediction = classify_screenshot(service_cfg, screenshot_path)
-    result["prediction"] = prediction
+    # 5. 提交异步分类任务
+    # 只要访问成功，就认为本轮任务成功，分类结果在后台处理
+    result["status"] = "success"
     
-    if is_blank_prediction(prediction, service_cfg):
-        logger.warning(f"检测到空白页 ({url}), 预测结果: {prediction}")
-        result["is_blank"] = True
-        result["status"] = "blank_page"
-        # 如果是空白页，是否需要清理抓包？根据需求，这里假设保留以便分析，或者也可以清理
-        if pcap_enabled and cleanup_on_failure:
-            delete_capture_files(capture_domain, capture_index, config)
-    else:
-        result["status"] = "success"
-        logger.info(f"处理成功: {url}, 分类结果: {prediction}")
+    future = classification_executor.submit(
+        _async_classify_task,
+        service_cfg,
+        pcap_cfg,
+        screenshot_path,
+        url,
+        capture_domain,
+        capture_index
+    )
+    result["future"] = future
+    
+    logger.info(f"访问成功，已提交后台分类: {url}")
 
     return result

@@ -1,6 +1,8 @@
 import logging
+import time
 from collections import deque
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Union, Dict, Any
+from concurrent.futures import Future
 
 from driver import get_firefox_driver
 from config_manager import load_config
@@ -63,35 +65,76 @@ def run_tasks(urls: Optional[Union[str, Iterable[str]]] = None):
     # 队列元素: {"url": url, "attempts": 0}
     task_queue = deque({"url": url, "attempts": 0} for url in normalized_urls)
     logger.info(f"总任务数: {len(task_queue)}")
+    
+    # 存储正在运行的异步任务: {future: task_info}
+    pending_futures: Dict[Future, Dict[str, Any]] = {}
 
     # 4. 初始化浏览器
     driver = None
     try:
+        driver = get_firefox_driver()
         
-        
-        while task_queue:
-            driver = get_firefox_driver()
-            task = task_queue.popleft()
-            url = task["url"]
-            attempts = task["attempts"]
-            
-            logger.info(f"开始处理任务 ({attempts + 1}/{max_retries + 1}): {url}")
-            
-            # 调用单次处理逻辑
-            result = process_single_url(driver, url, config)
-            status = result["status"]
-            
-            if status == "success":
-                logger.info(f"任务完成: {url}")
-            else:
-                logger.warning(f"任务失败 ({status}): {url}")
-                # 重试逻辑
-                if attempts < max_retries:
-                    logger.info(f"重新加入队列进行重试: {url}")
-                    task["attempts"] += 1
-                    task_queue.append(task)
+        while task_queue or pending_futures:
+            # --- 检查异步任务结果 ---
+            # 找出已完成的 futures
+            done_futures = [f for f in pending_futures if f.done()]
+            for future in done_futures:
+                task = pending_futures.pop(future)
+                url = task["url"]
+                attempts = task["attempts"]
+                
+                try:
+                    async_result = future.result()
+                    is_blank = async_result.get("is_blank", False)
+                    prediction = async_result.get("prediction")
+                    
+                    if is_blank:
+                        logger.warning(f"异步分类检测到空白页: {url}, 预测: {prediction}")
+                        if attempts < max_retries:
+                            logger.info(f"重新加入队列进行重试: {url}")
+                            task["attempts"] += 1
+                            task_queue.append(task)
+                        else:
+                            logger.error(f"达到最大重试次数，放弃任务: {url}")
+                    else:
+                        logger.info(f"异步任务确认成功: {url}, 预测: {prediction}")
+                        
+                except Exception as e:
+                    logger.error(f"获取异步任务结果失败 ({url}): {e}")
+
+            # --- 处理下一个任务 ---
+            if task_queue:
+                task = task_queue.popleft()
+                url = task["url"]
+                attempts = task["attempts"]
+                
+                logger.info(f"开始处理任务 ({attempts + 1}/{max_retries + 1}): {url}")
+                
+                # 调用单次处理逻辑
+                result = process_single_url(driver, url, config)
+                status = result["status"]
+                
+                if status == "success":
+                    # 任务提交成功，如果有 future，加入 pending 列表
+                    future = result.get("future")
+                    if future:
+                        pending_futures[future] = task
+                    else:
+                        # 如果没有 future (例如分类服务未启用)，则视为直接完成
+                        logger.info(f"任务完成 (无异步分类): {url}")
                 else:
-                    logger.error(f"达到最大重试次数，放弃任务: {url}")
+                    logger.warning(f"任务失败 ({status}): {url}")
+                    # 同步失败的重试逻辑 (例如访问超时)
+                    if attempts < max_retries:
+                        logger.info(f"重新加入队列进行重试: {url}")
+                        task["attempts"] += 1
+                        task_queue.append(task)
+                    else:
+                        logger.error(f"达到最大重试次数，放弃任务: {url}")
+            
+            # 如果没有任务了，但还有 pending futures，稍微等待一下避免空转
+            elif pending_futures:
+                time.sleep(0.5)
 
     except Exception as e:
         logger.critical(f"任务执行过程中发生严重错误: {e}", exc_info=True)
