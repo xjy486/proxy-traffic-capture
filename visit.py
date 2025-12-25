@@ -66,7 +66,7 @@ def visit_page(driver: WebDriver, url: str, screenshot_path: str, config: dict) 
         driver.set_page_load_timeout(timeout)
         driver.get(url)
         
-        _wait_for_ready_state(driver, timeout)
+        # _wait_for_ready_state(driver, timeout)
         
         # 模拟滚动以触发懒加载
         _simulate_user_scroll(driver, scroll_steps, scroll_pixels, scroll_pause)
@@ -79,9 +79,11 @@ def visit_page(driver: WebDriver, url: str, screenshot_path: str, config: dict) 
         driver.save_screenshot(screenshot_path)
         return True
         
-    # except TimeoutException:
-    #     logger.warning(f"访问超时: {url}")
-    #     return False
+    except TimeoutException:
+        # 访问超时
+        logger.warning(f"访问超时: {url}, 截图保存到: {screenshot_path}")
+        driver.save_screenshot(screenshot_path)
+        return True
     except WebDriverException as e:
         logger.error(f"浏览器错误 ({url}): {e}")
         return False
