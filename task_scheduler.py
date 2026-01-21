@@ -75,7 +75,7 @@ def run_tasks(urls: Optional[Union[str, Iterable[str]]] = None):
             url = task["url"]
             attempts = task["attempts"]
             
-            logger.info(f"开始处理任务 ({attempts + 1}/{max_retries + 1}): {url}")
+            logger.info(f"开始处理任务 ({attempts + 1}/{max_retries + 1}): {url}, 剩余任务数: {len(task_queue)}")
             
             # 调用单次处理逻辑
             result = process_single_url(driver, url, config)
@@ -92,7 +92,7 @@ def run_tasks(urls: Optional[Union[str, Iterable[str]]] = None):
                     task_queue.append(task)
                 else:
                     logger.error(f"达到最大重试次数，放弃任务: {url}")
-
+            driver.quit()
     except Exception as e:
         logger.critical(f"任务执行过程中发生严重错误: {e}", exc_info=True)
     finally:

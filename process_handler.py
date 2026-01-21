@@ -77,7 +77,7 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
     # 5. 截图分类
     prediction = classify_screenshot(service_cfg, screenshot_path)
     result["prediction"] = prediction
-    
+    # 判断分类结果是否为空白页
     if is_blank_prediction(prediction, service_cfg):
         logger.warning(f"检测到空白页 ({url}), 预测结果: {prediction}")
         result["is_blank"] = True
@@ -85,8 +85,8 @@ def process_single_url(driver: WebDriver, url: str, config: Dict[str, Any]) -> D
         # 如果是空白页，是否需要清理抓包？根据需求，这里假设保留以便分析，或者也可以清理
         if pcap_enabled and cleanup_on_failure:
             delete_capture_files(pcap_cfg, capture_domain, capture_index)
-    else:
-        result["status"] = "success"
-        logger.info(f"处理成功: {url}, 分类结果: {prediction}")
+        return result
+    # 6. 成功完成
     result["status"] = "success"
+    logger.info(f"处理成功: {url}, 分类结果: {prediction}")
     return result
