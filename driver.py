@@ -23,7 +23,12 @@ def get_firefox_driver():
     driver_cfg = config.get('driver', {})
 
     options = FirefoxOptions()
-    
+    # 读取Firefox Profile
+    profile_path = browser_cfg.get('profile')  
+    if profile_path and os.path.exists(profile_path):
+        options.add_argument("-profile")
+        options.add_argument(profile_path)
+        logger.info(f"使用 Firefox Profile: {profile_path}")  
     # 无头模式
     if browser_cfg.get('headless', False):
         options.add_argument('--headless')
